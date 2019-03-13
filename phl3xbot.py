@@ -50,8 +50,8 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
 
         ################ Moderator Commands ################
         #TWITCH-MOD-CLEAR
-        if cmd == "clear":
-            c.privmsg(self.channel, '/clear')
+        #if cmd == "clear":
+            #c.privmsg(self.channel, '/clear')
             
         ################ API Commands ################
         #TWITCH-API-GAME
@@ -62,13 +62,13 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
             c.privmsg(self.channel, 'Ya boi ' + r['display_name'] + ' is currently playing ' + r['game'])
 
         #SpotifyAPI-CurrentSong    #EXPIRED TOKEN!!!!!
-        elif cmd == "song":
+        #elif cmd == "song":
 
-            url = 'https://api.spotify.com/v1/me/player/currently-playing'          
-            headers = {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': 'Bearer BQBzv03gh15mqjfE83mYPjQdNYkLqMzn0nQe0REFio-nZxKGkb3SFqi06xDdxsRKjBigbu5H97qSEaP6RLLh04jMTc-jcF5pVOb-emNZ6LlmIhP1SAGcUUiF9MX3IInEqI-XcHLTFMBSJlO5j4dRX1bMCqLdBQ'}
-            song = requests.get(url, headers=headers).json()
+            #url = 'https://api.spotify.com/v1/me/player/currently-playing'          
+            #headers = {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': 'Bearer BQBzv03gh15mqjfE83mYPjQdNYkLqMzn0nQe0REFio-nZxKGkb3SFqi06xDdxsRKjBigbu5H97qSEaP6RLLh04jMTc-jcF5pVOb-emNZ6LlmIhP1SAGcUUiF9MX3IInEqI-XcHLTFMBSJlO5j4dRX1bMCqLdBQ'}
+            #song = requests.get(url, headers=headers).json()
 
-            c.privmsg(self.channel, 'Ya boi FakieNZ is currently playing ' + song['item']['name'] + ' from ' + song['item']['album']['name'])
+            #c.privmsg(self.channel, 'Ya boi FakieNZ is currently playing ' + song['item']['name'] + ' from ' + song['item']['album']['name'])
 
         #TWITCH-API-TITLE
         elif cmd == "title":
@@ -119,7 +119,7 @@ class MessageScheduler():
                 print('Messange sent: Youtube')
                 Phl3xBot.post_message(youtube)
 
-                time.sleep(150) #repeats
+                time.sleep(150)
         except KeyboardInterrupt:
             sys.exit(1)                    
 
