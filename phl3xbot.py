@@ -5,8 +5,6 @@ import irc.bot
 import requests
 import time
 from time import sleep
-import schedule
-from schedule import default_scheduler
 from threading import Thread 
 
 class ListenerBot(irc.bot.SingleServerIRCBot):
@@ -26,7 +24,10 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], username, username)            
 
     def __call__(self):
-        self.start()
+        try:
+            self.start()
+        except KeyboardInterrupt:
+            sys.exit(1)            
 
     def on_welcome(self, c, e):
         print ('Joining ' + self.channel)
@@ -35,8 +36,7 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
         c.cap('REQ', ':twitch.tv/commands')
         c.join(self.channel)
         time.sleep(3)
-        #c.privmsg(self.channel, 'has entered the game')
-        #Bot doesnt work until this func finishes running.             
+        #c.privmsg(self.channel, 'has entered the game')            
 
     def on_pubmsg(self, c, e):
         if e.arguments[0][:1] == '!':
@@ -101,15 +101,27 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
         c = self.connection
         c.privmsg(self.channel, message)
 
-class MessageScheduler(irc.schedule.DefaultScheduler):
+class MessageScheduler():
     def __init__(self):
         print ('Phl3xSched Initialised')
 
     def __call__(self, Phl3xBot):
-        time.sleep(10)
-        snapchat = 'My Snapchat is d1g1talis, Feel free to add me and send me lots of things (incl balls)'
-        Phl3xBot.post_message(snapchat)
-        print(snapchat)
+        try:
+            while True:
+                time.sleep(150)
+                
+                snapchat = 'My Snapchat is d1g1talis, Feel free to add me and send me lots of things (incl balls)'
+                Phl3xBot.post_message(snapchat)
+                print('Messange sent: Snapchat')
+                time.sleep(300)
+
+                youtube = 'Hey guys and gals, You can check out my youtube here https://www.youtube.com/channel/UC5-HRk8fW590P9bldGN9M8g'
+                print('Messange sent: Youtube')
+                Phl3xBot.post_message(youtube)
+
+                time.sleep(150) #repeats
+        except KeyboardInterrupt:
+            sys.exit(1)                    
 
 
 def main():
