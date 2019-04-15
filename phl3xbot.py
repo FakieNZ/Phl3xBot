@@ -5,15 +5,14 @@ import irc.bot
 import requests
 import sqlite3
 import time
+import datetime
 from time import sleep
 from threading import Thread
-#from termcolor import colored
+
 
 chat_db = os.path.join(os.path.dirname(__file__), 'chat_commands.db')
-
-class NewListenerBot(irc.client.SimpleIRCClient):
-    def testNLB(self):
-        print('Debug testNLB')     
+token_db = os.path.join(os.path.dirname(__file__), 'spotify_tokens.db')
+username = 'postmaster-nz'  
 
 class ListenerBot(irc.bot.SingleServerIRCBot):
     def __init__(self, username, client_id, token, channel):
@@ -47,7 +46,6 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
 
     def on_pubmsg(self, c, e):
         global chat_db
-        #print (e.'user-type'.[0])
         print (e.source + ' - ' + e.arguments[0])
 
         if e.arguments[0][:1] == '!':
@@ -59,7 +57,7 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
             self.do_user_command(e, cmd, cmdargs, usr)
 
         elif e.arguments[0][:1] == '#':
-            if True:
+            if e.tags[7]['value'] == 1 or e.tags[13]['value'] == 'mod' :
                 cmd = e.arguments[0].lower().split(' ')[0][1:]
                 cmdargs = e.arguments[0].split(' ')[1:]
                 print (cmdargs)
@@ -67,9 +65,13 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
                 print ('Received Mod command: ' + cmd)
                 self.do_mod_command(e, cmd, cmdargs, usr)    
             else:
-                pass
+                print ('Ignored Mod command from a user')
+                self.post_message('/me #Locals Only, Bro. No Kooks!') 
+                sleep(2)
+                self.post_message("Commands with '#' are for Mods, Have a siick vid instead - https://www.youtube.com/watch?v=PK28Kaj-X-4")
+                
 
-        elif e.arguments[0].lower().split(' ')[0] in ['kappa', 'kappapride', 'gachibass']:
+        elif e.arguments[0].lower().split(' ')[0] in ['rephl3xwhut','kappa','kappapride','gachibass']:
             cmd = e.arguments[0].lower().split(' ')[0]
             cmdargs = []
             cmdargs = e.arguments[0].split(' ')[1:]
@@ -78,7 +80,7 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
             self.do_user_command(e, cmd, cmdargs, usr)
 
         else:
-            pass    
+            pass   
 
     def add_command(self, chat_db, cmdargs):
         con = sqlite3.connect(chat_db)
@@ -127,31 +129,55 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
     def do_user_command(self, e, cmd, cmdargs, usr):
         global chat_db
         c = self.connection
-        ### ChatCommands ###
         con = sqlite3.connect(chat_db)
         cursor = con.cursor()
         cursor.execute("SELECT command_result FROM chat_commands WHERE command = ?", [cmd])
         sqlcmd = cursor.fetchall()
-        #print (sqlcmd)
         cursor.close()
         
         if sqlcmd:
             c.privmsg(self.channel, sqlcmd[0][0])
 
         ### Advanced/Logic Chat Commands ###
+        elif cmd in ['bot','phl3xbot', 'nightbot']:
+            self.post_message("I was forced to read 10,000 of Rephl3x's tweets and now i'm much better than nightbot - https://www.youtube.com/watch?v=OWwOJlOI1nU")
+            self.post_message('/me Wiki: https://bit.ly/2uP3lrB')
+            self.post_message('/me Commands: https://bit.ly/2U0mh0P')
+            self.post_message('/me Support: Send a whisper to FakieNZ')
+
         elif cmd == "bestfollower":
             if usr == "FakieNZ":
                 c.privmsg(self.channel, usr)
             else:
                 c.privmsg(self.channel, 'not ' + usr)
-   
-        ### API Commands ###
+
+        elif cmd == 'rr':
+            c.privmsg(self.channel, 'How many cowboys?')
+            sleep(3)
+            c.privmsg(self.channel, '18')
+        
+        elif cmd == 'lmgtfy':
+            if cmdargs != None:
+                g_prefix = 'https://www.google.com/search?q='
+                g_postfix = " ".join(map(str, cmdargs))
+                g_postfix = g_postfix.replace(' ','+')
+                c.privmsg(self.channel, g_prefix + g_postfix)
+            else:
+                pass
+
         #TWITCH-API-GAME
         elif cmd == "game":
             url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
             headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
             r = requests.get(url, headers=headers).json()
             c.privmsg(self.channel, 'Ya boi ' + r['display_name'] + ' is currently playing ' + r['game'])
+
+        #TWITCH-API-TITLE
+        elif cmd == "title":
+            url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
+            headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
+            r = requests.get(url, headers=headers).json()
+            c.privmsg(self.channel, r['status'])
 
         #TWITCH-API-UPTIME
         elif cmd == "uptime":
@@ -162,21 +188,44 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
             if r['stream'] == None:
                 c.privmsg(self.channel, 'Ya boi is busy doing other shit')
             else:
-                c.privmsg(self.channel, r['stream']['created_at'])    
+                raw_stream_started_at = r['stream']['created_at'] #2019-04-07T03:42:54Z 
+                UTC_stream_started_at = datetime.datetime.strptime(raw_stream_started_at, '%Y-%m-%dT%H:%M:%SZ')
+                Local_stream_started_at = UTC_stream_started_at + datetime.timedelta(hours=12)  
+                Local_stream_started_at_timeobject = Local_stream_started_at.time()
 
-        #SpotifyAPI-CurrentSong    #EXPIRED TOKEN!!!!!
+                Local_datetime_now = datetime.datetime.now()
+                
+                stream_uptime = Local_datetime_now - Local_stream_started_at
+                stream_uptime_str = str(stream_uptime)
+                stream_uptime_hours = stream_uptime_str.split(':')[0]
+                stream_uptime_minutes = stream_uptime_str.split(':')[1]             
+            
+                c.privmsg(self.channel, 'Streaming since ' + str(Local_stream_started_at_timeobject) + ' NZ Time')
+                c.privmsg(self.channel, 'Ya boi has been live for ' + stream_uptime_hours + ' hours ' + stream_uptime_minutes + ' minutes (or at least time since the last internet flap LUL)')
+
+        #SpotifyAPI-CurrentSong
         elif cmd == "song":
+            conection = sqlite3.connect(token_db)
+            cursor = conection.cursor()
+            load_sql = "SELECT access_token,refresh_token FROM spotify_token WHERE username = ?"
+            cursor.execute(load_sql, [username])
+            token_data = cursor.fetchone()
+            conection.close()
+            access_token = token_data[0]
+            access_token = str('Bearer ' + access_token)             
+            
             url = 'https://api.spotify.com/v1/me/player/currently-playing'          
-            headers = {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': 'Bearer BQCQ8A-qSf-1dTtX2wjlPb9o4_g-xtxxX1vcewdV46Vvpu3m5BHTHe9CIU0I33S4WKCWLHe0dfIi28LOUC0VjEWH2zJHsmYcztcgaTs_DaVw1os-jbFF8lNYTLZOJNeh8DpbqbCeanPGXrO4hQEPh4QXsL8'}
+            headers = {'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': access_token}
             song = requests.get(url, headers=headers).json()
-            c.privmsg(self.channel, 'Ya boi FakieNZ is currently playing ' + song['item']['name'] + ' from ' + song['item']['album']['name'])
 
-        #TWITCH-API-TITLE
-        elif cmd == "title":
-            url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
-            headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
-            r = requests.get(url, headers=headers).json()
-            c.privmsg(self.channel, r['status'])
+            if 'error' in song:
+                self.post_message('Spotify API Error: ' + str(song['error']['status']) + ' - ' + song['error']['message'])
+            elif song['is_playing'] != True:
+                c.privmsg(self.channel, 'Ya boi aint got nothing playing on Spotify')
+            elif song['item']:    
+                c.privmsg(self.channel, 'Ya boi is currently playing ' + song['item']['name'] + ' by ' + song['item']['artists'][0]['name'] + ' from the album ' + song['item']['album']['name'])
+            else:
+                pass
 
         else:
             print ('Ignored Command: ' + cmd)
@@ -216,13 +265,14 @@ def main():
     client_id = sys.argv[2]
     token     = sys.argv[3]
     channel   = sys.argv[4]
-
+    
     Phl3xBot = ListenerBot(username, client_id, token, channel)
     Phl3xBotThread = Thread(target=Phl3xBot)
     Phl3xBotThread.start()
 
-    Phl3xSchedThread = Thread(target=MessageScheduler(Phl3xBot))
-    Phl3xSchedThread.start() 
+    MessageScheduler(Phl3xBot)
+    #Phl3xSchedThread = Thread(target=MessageScheduler(Phl3xBot))
+    #Phl3xSchedThread.start()
 
 if __name__ == "__main__":
     main()
