@@ -8,33 +8,67 @@ import time
 import datetime
 from time import sleep
 from threading import Thread
+import json
+from mock import mock
 
 
 chat_db = os.path.join(os.path.dirname(__file__), 'chat_commands.db')
 token_db = os.path.join(os.path.dirname(__file__), 'spotify_tokens.db')
+chat_log_db = os.path.join(os.path.dirname(__file__), 'chat_log.db')
 username = 'postmaster-nz'  
 
 class ListenerBot(irc.bot.SingleServerIRCBot):
     def __init__(self, username, client_id, token, channel):
+        global chat_db
+        global token_db
+        global chat_log_db
+        
         self.client_id = client_id
         self.token = token
         self.channel = '#' + channel
-       
         url = 'https://api.twitch.tv/kraken/users?login=' + channel 
         headers = {'Client-ID': client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
         r = requests.get(url, headers=headers).json()
         self.channel_id = r['users'][0]['_id']
-
         server = 'irc.chat.twitch.tv'
         port = 6667
         print ('Connecting to ' + server + ' on port ' + str(port) + '...')
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], username, username)
 
-        global chat_db
-
     def __call__(self):
         self.start()
-                    
+
+    def log_message(self, e):
+        #Commit an entry to the chat log db
+        timestamp = datetime.datetime.now()
+        username = e.source.split('@')[1]
+        user_id = e.tags[12]['value']
+        user_type = e.tags[13]['value']
+        display_name = e.tags[3]['value']
+        message = e.arguments[0]
+        
+        #Chat Logs Database Connection + Cursor + SQL Execution
+        chat_log_con = sqlite3.connect(chat_log_db)
+        chat_log_cursor = chat_log_con.cursor()
+        sql ="""
+            INSERT INTO chat_log (timestamp, username, user_id, user_type, display_name, message) 
+            VALUES (?, ?, ?, ?, ?, ?)"""
+        
+        chat_log_cursor.execute(sql, (timestamp, username, user_id, user_type, display_name, message))
+        chat_log_con.commit()
+        chat_log_con.close()
+    
+    def post_message(self, message):
+        c = self.connection
+        c.privmsg(self.channel, message)
+    
+    def get_channel_id(self, username):
+        url = 'https://api.twitch.tv/kraken/users?login=' + username 
+        headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
+        r = requests.get(url, headers=headers).json()
+        caster_id = r['users'][0]['_id']
+        return caster_id
+
     def on_welcome(self, c, e):
         print ('Joining ' + self.channel)
         c.cap('REQ', ':twitch.tv/membership')
@@ -46,9 +80,15 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
 
     def on_pubmsg(self, c, e):
         global chat_db
+        self.log_message(e)
         print (e.source + ' - ' + e.arguments[0])
 
-        if e.arguments[0][:1] == '!':
+        if e.tags[3]['value'] in ['Nightbot', 'jnzl']:
+            msg = 'hi im ' + e.tags[3]['value'] + ' and ' + e.arguments[0].lower()
+            mocked_msg = mock(msg)
+            self.post_message(mocked_msg)
+        
+        elif e.arguments[0][:1] == '!':
             cmd = e.arguments[0].lower().split(' ')[0][1:]
             cmdargs = []
             cmdargs = e.arguments[0].split(' ')[1:]
@@ -81,50 +121,6 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
 
         else:
             pass   
-
-    def add_command(self, chat_db, cmdargs):
-        con = sqlite3.connect(chat_db)
-        cursor = con.cursor()
-        parsedcom = " ".join(map(str, cmdargs[1:]))
-        print (parsedcom)
-        sql ="""
-            INSERT INTO chat_commands (command, command_result) 
-            VALUES (?, ?)"""
-        cursor.execute(sql, (cmdargs[0].lower(), parsedcom))
-        con.commit()
-        con.close()
-        self.post_message ('New command created: !' + cmdargs[0])
-        print ('New command created: !' + cmdargs[0])
-
-    def delete_command(self, chat_db, cmdargs):
-        con = sqlite3.connect(chat_db)
-        cursor = con.cursor()
-        sql = "DELETE FROM chat_commands WHERE command = ?"
-        cmdname = cmdargs[0].lower()
-        cursor.execute(sql, [cmdname])
-        con.commit()
-        con.close()
-        self.post_message ('Command deleted: !' + cmdargs[0])       
-
-    def do_mod_command(self, e, cmd, cmdargs, usr):
-        global chat_db
-        cmdargs = cmdargs
-
-        if cmd == "addcom":
-            self.add_command(chat_db, cmdargs)
-
-        elif cmd == "delcom":
-            self.delete_command(chat_db, cmdargs)
-
-        elif cmd == "caster":
-            url_base = 'https://www.twitch.tv/'
-            caster = cmdargs[0]
-            self.post_message('You should checkout ' +  caster +  ' over at their channel - ' + url_base + caster.lower() + " - Don't forget to drop them a follow!" )
-
-        elif cmd == "clear":
-            self.post_message('/clear')
-        else:
-            print ('Ignored Mod Command: ' + cmd)
 
     def do_user_command(self, e, cmd, cmdargs, usr):
         global chat_db
@@ -159,9 +155,9 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
         elif cmd == 'lmgtfy':
             if cmdargs != None:
                 g_prefix = 'https://www.google.com/search?q='
-                g_postfix = " ".join(map(str, cmdargs))
-                g_postfix = g_postfix.replace(' ','+')
-                c.privmsg(self.channel, g_prefix + g_postfix)
+                g_suffix = " ".join(map(str, cmdargs))
+                g_suffix = g_suffix.replace(' ','+')
+                c.privmsg(self.channel, g_prefix + g_suffix)
             else:
                 pass
 
@@ -188,7 +184,7 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
             if r['stream'] == None:
                 c.privmsg(self.channel, 'Ya boi is busy doing other shit')
             else:
-                raw_stream_started_at = r['stream']['created_at'] #2019-04-07T03:42:54Z 
+                raw_stream_started_at = r['stream']['created_at'] #Twitch Time (UTC) Format 2019-04-07T03:42:54Z 
                 UTC_stream_started_at = datetime.datetime.strptime(raw_stream_started_at, '%Y-%m-%dT%H:%M:%SZ')
                 Local_stream_started_at = UTC_stream_started_at + datetime.timedelta(hours=12)  
                 Local_stream_started_at_timeobject = Local_stream_started_at.time()
@@ -230,31 +226,111 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
         else:
             print ('Ignored Command: ' + cmd)
 
-    def post_message(self, message):
-        c = self.connection
-        c.privmsg(self.channel, message)
+    def do_mod_command(self, e, cmd, cmdargs, usr):
+        global chat_db
+        cmdargs = cmdargs
 
-    def test(self):
-        print('Debug: Test()')
+        if cmd == "addcom":
+            self.add_command(chat_db, cmdargs)
+
+        elif cmd == "delcom":
+            self.delete_command(chat_db, cmdargs)
+
+        #elif cmd == "title":
+            #self.set_stream_title(cmdargs)
+            
+        #elif cmd == "game":
+            #self.set_stream_game(cmdargs)
+
+        elif cmd in ['caster','shoutout', 'streamer', 'so' ]:
+            url_base = 'https://www.twitch.tv/'
+            caster = cmdargs[0]
+            caster_id = self.get_channel_id(caster)
+            
+            channels_url = 'https://api.twitch.tv/kraken/channels/' + caster_id
+            headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
+            r = requests.get(channels_url, headers=headers).json()
+
+            self.post_message('You should checkout ' +  caster +  ' over at their channel - ' + url_base + caster.lower() + " - Don't forget to drop them a follow!" )
+            sleep (2)
+            if r['game'] != None:
+                self.post_message(caster + ' was last playing ' + r['game'])
+            else:
+                pass
+
+        elif cmd == "clear":
+            self.post_message('/clear')
+        else:
+            print ('Ignored Mod Command: ' + cmd)
+
+    def add_command(self, chat_db, cmdargs):
+        con = sqlite3.connect(chat_db)
+        cursor = con.cursor()
+        parsedcom = " ".join(map(str, cmdargs[1:]))
+        print (parsedcom)
+        sql ="""
+            INSERT INTO chat_commands (command, command_result) 
+            VALUES (?, ?)"""
+        cursor.execute(sql, (cmdargs[0].lower(), parsedcom))
+        con.commit()
+        con.close()
+        self.post_message ('New command created: !' + cmdargs[0])
+        print ('New command created: !' + cmdargs[0])
+
+    def delete_command(self, chat_db, cmdargs):
+        con = sqlite3.connect(chat_db)
+        cursor = con.cursor()
+        sql = "DELETE FROM chat_commands WHERE command = ?"
+        cmdname = cmdargs[0].lower()
+        cursor.execute(sql, [cmdname])
+        con.commit()
+        con.close()
+        self.post_message ('Command deleted: !' + cmdargs[0])       
+
+    def set_stream_title(self, cmdargs):
+        
+        #BadAuth - OAUTH TOKENS are missing required Scope
+        new_title = " ".join(map(str, cmdargs))
+        url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
+        title_headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json', 'Authorization': 'OAuth '+ self.token, 'Content-Type': 'application/json'}
+        body_data = {'channel': {'status': new_title}}
+        title_payload = json.dumps(body_data)
+        r = requests.put(url, data=title_payload, headers=title_headers)
+
+        print (title_headers)
+        print (title_payload)
+        print (r)
+
+    def set_stream_game(self, cmdargs):
+        pass # pending on set_stream_title and resolves AUTH issues.
+        
 
 def MessageScheduler(Phl3xBot):
-    print ('Debug: MessageScheduler')
     while True:
-        time.sleep(900)
-                
-        snapchat = 'My Snapchat is d1g1talis, Feel free to add me and send me lots of things (incl balls)'
-        Phl3xBot.post_message(snapchat)
+        db_msgs = {}
+        messages = ['snapchat','youtube','twitter','discord']
+        
+        for msg in messages:
+            con = sqlite3.connect(chat_db)
+            cursor = con.cursor()
+            cursor.execute("SELECT command_result FROM chat_commands WHERE command = ?", [msg])
+            temp = cursor.fetchone()
+            db_msgs[msg] = temp[0]
+            cursor.close()  
+
+        time.sleep(450)
+        Phl3xBot.post_message(db_msgs.pop('snapchat'))
         print('Messange sent: Snapchat')
-        time.sleep(1800)
-
-        youtube = 'Hey guys and gals, You can check out my youtube here https://www.youtube.com/channel/UC5-HRk8fW590P9bldGN9M8g'
-        print('Messange sent: Youtube')
-        Phl3xBot.post_message(youtube)
-
         time.sleep(900)
-
-def maintest():
-    print('Debug: maintest()')
+        Phl3xBot.post_message(db_msgs.pop('youtube'))
+        print('Messange sent: youtube')
+        time.sleep(900)
+        Phl3xBot.post_message(db_msgs.pop('twitter'))
+        print('Messange sent: twitter')
+        time.sleep(900)
+        Phl3xBot.post_message(db_msgs.pop('discord'))
+        print('Messange sent: discord')
+        time.sleep(450)
 
 def main():
     if len(sys.argv) != 5:
@@ -270,9 +346,7 @@ def main():
     Phl3xBotThread = Thread(target=Phl3xBot)
     Phl3xBotThread.start()
 
-    MessageScheduler(Phl3xBot)
-    #Phl3xSchedThread = Thread(target=MessageScheduler(Phl3xBot))
-    #Phl3xSchedThread.start()
+    MessageScheduler(Phl3xBot)    
 
 if __name__ == "__main__":
     main()
