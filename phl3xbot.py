@@ -70,7 +70,11 @@ class ListenerBot(irc.bot.SingleServerIRCBot):
         url = 'https://api.twitch.tv/helix/streams?user_id=' + channel_id
         headers = {'Client-ID': self.client_id}
         r = requests.get(url, headers=headers).json()
-        return r['data'][0]['type']
+        if len(r['data']) > 0: #r['data'][0]['type'] == 'live'
+            s = 'live'
+        else:
+            s = 'offline'
+        return s
 
     def get_channel_stats(self, channel_id):
         #viewers
@@ -767,7 +771,8 @@ def MessageScheduler(Phl3xBot):
             print('Messange sent: discord')
             time.sleep(450)
         else:
-            print ('Channel Offline - ' + datetime.datetime.now() )
+            sleep (5)
+            print ('Channel Offline - ' + str(datetime.datetime.now()))
             sleep (900)
             
 
